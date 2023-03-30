@@ -1,4 +1,5 @@
 
+# Providence Accident Map Project
 
-This project requires a google api key. Create the 'config/google-api-key.R' file
-and set enter your key as the following: google_key <- "xyz"
+## Google API Key Setup
+This project [requires a google api key](https://developers.google.com/maps/documentation/geocoding/get-api-key). Once you've generated the key, create a file: 'config/google-api-key.R'. Set your key in this file with: google_key <- "xyz"
