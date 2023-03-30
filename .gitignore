@@ -1,0 +1,5 @@
+config/
+.DS_Store
+.Rproj.user/
+scripts/archive/
+scripts/.Rapp.history
