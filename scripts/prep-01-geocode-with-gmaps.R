@@ -1,6 +1,14 @@
 
+# Description:
+# This script uses 3  different google apis to retrieve coordinates for the raw intersections and addresses given by
+# the city of Providence. The first geocoding pass worked well on some addresses but not well on others. We then use google's
+# autocomplete api to guess more locations. We retrieve coordinates from guesses via google's place details api. 
+# My understanding is that gmaps returns coordinates in the WGS84 EPSG 4326 CRS
+
+# Helpful links:
+# https://developers.google.com/maps/documentation/geocoding/best-practices
 # https://developers.google.com/maps/documentation/geocoding/overview
-# my understanding is that gmaps returns coordinates in the WGS84 EPSG 4326 CRS
+# https://rpubs.com/michaeldgarber/geocode
 
 # BE SURE TO DELETE SAMPLE LINE ONCE WE RECEIVE THE CORRECT DATA FROM CITY - LINE 30 
 
@@ -25,7 +33,7 @@ raw <- read_csv(here("raw/pvd-accidents-raw.csv"),
                   PersonCount = col_double(),
                   InjuryCount = col_double()
                 )) %>% 
-  sample_n(2000) # DELETE THIS LINE LATER
+  sample_n(300) # DELETE THIS LINE LATER
 
 # register google api keys ------------------------------------------------
 
@@ -37,63 +45,129 @@ register_google(key = google_key)
 # for googleway
 googleway::set_key(key = google_key)
 
-# clean up ----------------------------------------------------------------
+# initial cleanup ---------------------------------------------------------
+
+# reformat the addresses to work best with google's geocoder
 
 accidents <- raw %>% 
   janitor::clean_names() %>% 
   select(-c(report_number, officer, badge)) %>% 
   mutate(has_st_number = str_detect(street_or_highway, "^[[:digit:]]"), #does the location column start with a digit?
-         address_original = if_else(has_st_number, glue("{str_to_title(street_or_highway)} Providence, RI"),
-                           glue("{str_to_title(street_or_highway)} and {str_to_title(nearest_intersection)} Providence, RI")),
-         row_number = row_number()) 
+         address = if_else(has_st_number, glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
+                           glue("{str_to_title(street_or_highway)} and {str_to_title(nearest_intersection)}, Providence, RI, USA")),
+         address = str_replace(address, " St ", " Street "),
+         address = str_replace(address, " St,", " Street,"),
+         address = str_replace(address, " & ", " and "),
+         row_number = row_number())
 
-# autocomplete addresses --------------------------------------------------
+# first round of geocoding ------------------------------------------------
 
-# ggmap's mutate_geocode() function does not perform well on the address_original column.
-# To improve the accuracy of our geocoding, we're first using google's 'place autocomplete api' to
-# guess and reformat the address. We'll then pass those results into geocode().
+accidents_with_coordinates <- accidents %>% 
+  mutate_geocode(address, output = "more")
 
-# https://developers.google.com/maps/documentation/geocoding/best-practices
+addresses_with_warnings <- warnings()
 
-autocomplete_addresses <- function(address_xyz) {
+# use autocomplete to improve accuracy of certain rows --------------------
+
+uncertain_coords <- accidents_with_coordinates %>% 
+  filter(!(type %in% c("intersection", "premise", "street_address", "subpremise")))
+
+# define autocomplete api function
+google_autocomplete <- function(address_xyz) {
   googleway::google_place_autocomplete(place_input = address_xyz,
-                                       location = c(41.823989, -71.412834)) %>% 
-    pluck(1, 1, 1) # index into returned list to pluck the first autocompletion for each address
+                                       location = c(41.823989, -71.412834))
 }
 
-autocompletion_vector <- accidents %>% 
-  mutate(address_autocompleted = map(address_original, autocomplete_addresses)) %>% 
-  pull(address_autocompleted) %>% 
-  na_if("NULL") %>% # if no auto-completions are returned, change NULL to NA so we can create a simple character vector
-  unlist()
+autocomplete_results <- uncertain_coords %>%
+  pull(address...24) %>% 
+  map(., google_autocomplete) 
 
-# add the autocompletion vector into our accidents data frame as a new column
-accidents_with_autocompletions <- accidents %>% 
-  mutate(address_autocompleted = autocompletion_vector,
-         autocompletion_found = case_when(is.na(address_autocompleted) ~ F,
-                                          T ~ T))
+# extract info from autocomplete results ----------------------------------
 
-# geocode -----------------------------------------------------------------
+# extract addresses from autocomplete results
+autocomplete_addresses <- map(autocomplete_results, ~pluck(.x, "predictions", "description")) 
 
-# 'EXIT' INTERSECTIONS ARE AMBIGUOUS - WILL NEED ATTENTION LATER
+# If autocomplete returned multiple addresses, set to NA, 
+# If autocomplete didn't return a result with ' & ', set to NA
+# If autcomplete returned NULL, set to NA
+cleaned_autocomplete_addresses <- map_chr(autocomplete_addresses, ~if_else(length(.x) > 1, NA_character_,
+                                                                           .x[[1]])) %>% 
+  if_else(str_detect(., " & ", negate = T), NA_character_, .) %>% 
+  na_if("NULL") 
 
-# some final address prep and geocoding
-accidents_with_coords <- accidents_with_autocompletions %>%
-  mutate(address_to_geocode = if_else(autocompletion_found == TRUE, address_autocompleted, as.character(address_original)),
-         address_to_geocode = str_replace(address_to_geocode, " St ", " Street "),
-         address_to_geocode = str_replace(address_to_geocode, " St,", " Street,"),
-         address_to_geocode = str_replace(address_to_geocode, " & ", " and ")) %>% 
-  mutate_geocode(address_to_geocode,
-                 output = "more") 
+# extract place ids from autocomplete results
+autocomplete_place_ids <- map(autocomplete_results, ~pluck(.x, "predictions", "place_id")) 
 
-warnings_from_geocoding <- warnings()
+cleaned_autocomplete_place_ids <- map_chr(autocomplete_place_ids, ~if_else(length(.x) > 1, NA_character_, .x[[1]]))
 
+# get the coordinates of the locations found by autocomplete --------------
+
+# add the autocomplete vectors into our uncertain_coords dataframe 
+uncertain_coords_with_auto_cols <- uncertain_coordinates %>% 
+  mutate(address_autocompleted = cleaned_autocomplete_addresses,
+         place_ids_autocompleted = if_else(is.na(cleaned_autocomplete_addresses), 
+                                           NA_character_, cleaned_autocomplete_place_ids),
+         index = as.character(row_number()))
+
+# define place api function
+geocode_with_place_ids <- function(place_id) {
+googleway::google_place_details(place_id) %>%
+  pluck("result", "geometry", "location") %>% 
+  as.data.frame()
+}
+
+# retrieve coordinates via google's place details api
+second_round_coords <- uncertain_coords_with_auto_cols %>% 
+  pull(place_ids_autocompleted) %>% 
+  map_dfr(., geocode_with_place_ids, .id = "index")
+
+# add the new coordinates back into full dataframe
+combined <- uncertain_coords_with_auto_cols %>% 
+  select(row_number, address_autocompleted, place_ids_autocompleted, index) %>% 
+  left_join(., second_round_coords, by = c("index")) %>% 
+  rename(lat_second_try = lat,
+         lon_second_try = lng) %>% 
+  left_join(accidents_with_coordinates, ., by = "row_number") %>% 
+  arrange(row_number) %>% 
+  select(row_number, report_date, everything())
+
+# final cleanup -----------------------------------------------------------
+
+# rename, drop, and add columns
+final <- combined %>% 
+  rename(lon_first_try = lon,
+         lat_first_try = lat,
+         manner_of_impact = mannerof_impact,
+         address_sent_to_geocoder = "address...24",
+         address_returned_by_geocoder = "address...30",
+         address_returned_by_autocomplete = address_autocompleted) %>%
+  select(-c(south, north, east, west, index)) %>% 
+  mutate(bicycle = case_when(bicycle == "X" ~ T, T ~ F),
+         scooter = case_when(scooter == "X" ~ T, T ~ F),
+         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F),
+         lat_best = case_when(!is.na(place_ids_autocompleted) ~ lat_second_try,
+                              type %in% c("intersection", "premise", "street_address", "subpremise") ~ lat_first_try,
+                              T ~ NA_real_),
+         lon_best = case_when(!is.na(place_ids_autocompleted) ~ lon_second_try,
+                              type %in% c("intersection", "premise", "street_address", "subpremise") ~ lon_first_try,
+                              T ~ NA_real_))
+           
 # write out data ----------------------------------------------------------
 
-final <- accidents_with_coords %>% 
-  rename(address_returned_by_geocoder = address) %>%
+final %>% 
   write_csv("proc/addresses-with-gmaps-coordinates.csv")
 
+# plot --------------------------------------------------------------------
+
+# final %>% 
+#   slice(78) %>% 
+#   st_as_sf(coords = c("lon_best", "lat_best"), crs = 4326) %>% 
+#   leaflet() %>% 
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   setView(lng = -71.402550, lat = 41.826771, zoom = 14) %>%
+#   addCircles(stroke = T,
+#              color = "black",
+#              weight = 10)
 
 
     
