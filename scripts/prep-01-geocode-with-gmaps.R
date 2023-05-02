@@ -64,8 +64,8 @@ accidents <- raw %>%
          address = if_else(is.na(address), "", address),
          is_address_blank = if_else(address == "", T, F),
          row_number = row_number(),
-         scooter = case_when(scooter == "1" ~ T, T ~ F),
-         wheel_chair = case_when(wheel_chair == "1" ~ T, T ~ F)) %>% 
+         scooter = case_when(scooter == "X" ~ T, T ~ F),
+         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)) %>% 
   rename(lat_raw = latitude,
          lon_raw = longitude,
          manner_of_impact = mannerof_impact,
