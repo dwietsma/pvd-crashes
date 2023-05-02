@@ -27,6 +27,7 @@ raw <- read_csv(here("raw/pvd-accidents-raw.csv"),
                 col_types = cols(
                   .default = col_character(),
                   CrashDate = col_date(format = "%d-%b-%y"),
+                  ReportDate = col_date(format = "%d-%b-%y"),
                   CrashReportId = col_double(),
                   CrashTime = col_time(),
                   NumberofVehicles = col_double(),
