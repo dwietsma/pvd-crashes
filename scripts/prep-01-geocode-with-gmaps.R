@@ -26,14 +26,15 @@ library(googleway)
 raw <- read_csv(here("raw/pvd-accidents-raw.csv"),
                 col_types = cols(
                   .default = col_character(),
-                  CrashDate = col_date(format = "%m/%d/%y"),
+                  CrashDate = col_date(format = "%d-%b-%y"),
                   CrashReportId = col_double(),
-                  CrashTime = col_time(format = ""),
+                  CrashTime = col_time(),
                   NumberofVehicles = col_double(),
                   PersonCount = col_double(),
-                  InjuryCount = col_double()
-                )) %>% 
-  sample_n(300) # DELETE THIS LINE LATER
+                  InjuryCount = col_double(),
+                  Latitude = col_character(),
+                  Longitude = col_character()
+                )) 
 
 # register google api keys ------------------------------------------------
 
@@ -53,12 +54,22 @@ accidents <- raw %>%
   janitor::clean_names() %>% 
   select(-c(report_number, officer, badge)) %>% 
   mutate(has_st_number = str_detect(street_or_highway, "^[[:digit:]]"), #does the location column start with a digit?
-         address = if_else(has_st_number, glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
-                           glue("{str_to_title(street_or_highway)} and {str_to_title(nearest_intersection)}, Providence, RI, USA")),
+         is_intersection_null = if_else(is.na(nearest_intersection), T, F),
+         address = case_when(has_st_number == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
+                             is_intersection_null == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
+                             T ~ glue("{str_to_title(street_or_highway)} and {str_to_title(nearest_intersection)}, Providence, RI, USA")),
          address = str_replace(address, " St ", " Street "),
          address = str_replace(address, " St,", " Street,"),
          address = str_replace(address, " & ", " and "),
-         row_number = row_number())
+         address = if_else(is.na(address), "", address),
+         is_address_blank = if_else(address == "", T, F),
+         row_number = row_number(),
+         scooter = case_when(scooter == "1" ~ T, T ~ F),
+         wheel_chair = case_when(wheel_chair == "1" ~ T, T ~ F)) %>% 
+  rename(lat_raw = latitude,
+         lon_raw = longitude,
+         manner_of_impact = mannerof_impact,
+         number_of_vehicles = numberof_vehicles)
 
 # first round of geocoding ------------------------------------------------
 
@@ -79,7 +90,7 @@ google_autocomplete <- function(address_xyz) {
 }
 
 autocomplete_results <- uncertain_coords %>%
-  pull(address...24) %>% 
+  pull(address...28) %>% 
   map(., google_autocomplete) 
 
 # extract info from autocomplete results ----------------------------------
@@ -103,7 +114,7 @@ cleaned_autocomplete_place_ids <- map_chr(autocomplete_place_ids, ~if_else(lengt
 # get the coordinates of the locations found by autocomplete --------------
 
 # add the autocomplete vectors into our uncertain_coords dataframe 
-uncertain_coords_with_auto_cols <- uncertain_coordinates %>% 
+uncertain_coords_with_auto_cols <- uncertain_coords %>% 
   mutate(address_autocompleted = cleaned_autocomplete_addresses,
          place_ids_autocompleted = if_else(is.na(cleaned_autocomplete_addresses), 
                                            NA_character_, cleaned_autocomplete_place_ids),
@@ -125,33 +136,36 @@ second_round_coords <- uncertain_coords_with_auto_cols %>%
 combined <- uncertain_coords_with_auto_cols %>% 
   select(row_number, address_autocompleted, place_ids_autocompleted, index) %>% 
   left_join(., second_round_coords, by = c("index")) %>% 
-  rename(lat_second_try = lat,
-         lon_second_try = lng) %>% 
+  rename(lat_api_second_try = lat,
+         lon_api_second_try = lng) %>% 
   left_join(accidents_with_coordinates, ., by = "row_number") %>% 
   arrange(row_number) %>% 
-  select(row_number, report_date, everything())
+  select(row_number, crash_date, everything())
 
 # final cleanup -----------------------------------------------------------
 
 # rename, drop, and add columns
-final <- combined %>% 
-  rename(lon_first_try = lon,
-         lat_first_try = lat,
-         manner_of_impact = mannerof_impact,
-         address_sent_to_geocoder = "address...24",
-         address_returned_by_geocoder = "address...30",
+clean_combined <- combined %>% 
+  rename(lon_api_first_try = lon,
+         lat_api_first_try = lat,
+         address_sent_to_geocoder = "address...28",
+         address_returned_by_geocoder = "address...35",
          address_returned_by_autocomplete = address_autocompleted) %>%
   select(-c(south, north, east, west, index)) %>% 
-  mutate(bicycle = case_when(bicycle == "X" ~ T, T ~ F),
-         scooter = case_when(scooter == "X" ~ T, T ~ F),
-         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F),
-         lat_best = case_when(!is.na(place_ids_autocompleted) ~ lat_second_try,
-                              type %in% c("intersection", "premise", "street_address", "subpremise") ~ lat_first_try,
-                              T ~ NA_real_),
-         lon_best = case_when(!is.na(place_ids_autocompleted) ~ lon_second_try,
-                              type %in% c("intersection", "premise", "street_address", "subpremise") ~ lon_first_try,
-                              T ~ NA_real_))
-           
+  mutate(lat_api_best = case_when(!is.na(place_ids_autocompleted) ~ lat_api_second_try,
+                                  T ~ lat_api_first_try),
+         lon_api_best = case_when(!is.na(place_ids_autocompleted) ~ lon_api_second_try,
+                              T ~ lon_api_first_try),
+         api_coord_conf = case_when(has_st_number == T ~ "High",
+                                    has_st_number == F & is_intersection_null == T ~ "Inaccurate",
+                                    type %in% c("intersection", "premise", "street_address", "subpremise") ~ "Med High",                                    !is.na(place_ids_autocompleted) ~ "Med",
+                                    T ~ "Med")) 
+
+final <- clean_combined %>% 
+  rowwise() %>% #compute distance between raw coords and best api coords
+  mutate(distance_btwn_coords_meters = geosphere::distHaversine(c(as.numeric(lon_raw), as.numeric(lat_raw)), 
+                                                                c(lon_api_best, lat_api_best)))
+
 # write out data ----------------------------------------------------------
 
 final %>% 

@@ -3,3 +3,6 @@ config/
 .Rproj.user/
 scripts/archive/
 scripts/.Rapp.history
+.Rhistory
+raw/pvd-accidents-raw-no-cycling.csv
+raw/pvd-accidents-raw-incorrect.csv
