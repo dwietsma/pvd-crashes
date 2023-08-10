@@ -54,7 +54,7 @@ googleway::set_key(key = google_key)
 accidents <- raw %>% 
   janitor::clean_names() %>% 
   select(-c(report_number, officer, badge)) %>% 
-  mutate(has_st_number = str_detect(street_or_highway, "^[[:digit:]]"), #does the location column start with a digit?
+  mutate(has_st_number = str_detect(street_or_highway, "^\\d*\\s"), #does the location column start with a digits and a space?
          is_intersection_null = if_else(is.na(nearest_intersection), T, F),
          address = case_when(has_st_number == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
                              is_intersection_null == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
@@ -156,11 +156,7 @@ clean_combined <- combined %>%
   mutate(lat_api_best = case_when(!is.na(place_ids_autocompleted) ~ lat_api_second_try,
                                   T ~ lat_api_first_try),
          lon_api_best = case_when(!is.na(place_ids_autocompleted) ~ lon_api_second_try,
-                              T ~ lon_api_first_try),
-         api_coord_conf = case_when(has_st_number == T ~ "High",
-                                    has_st_number == F & is_intersection_null == T ~ "Inaccurate",
-                                    type %in% c("intersection", "premise", "street_address", "subpremise") ~ "Med High",                                    !is.na(place_ids_autocompleted) ~ "Med",
-                                    T ~ "Med")) 
+                              T ~ lon_api_first_try)) 
 
 final <- clean_combined %>% 
   rowwise() %>% #compute distance between raw coords and best api coords
@@ -170,7 +166,7 @@ final <- clean_combined %>%
 # write out data ----------------------------------------------------------
 
 final %>% 
-  write_csv("proc/addresses-with-gmaps-coordinates.csv")
+  write_tsv("proc/addresses-with-gmaps-coordinates.tsv")
 
 # plot --------------------------------------------------------------------
 
