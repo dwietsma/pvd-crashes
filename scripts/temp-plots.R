@@ -12,7 +12,30 @@ library(mapview)
 
 # read in data ------------------------------------------------------------
 
-accidents_with_coords <- read_csv(here("proc/addresses-with-gmaps-coordinates.csv"))
+accidents_with_coords <- read_tsv(here::here("proc/processed-addresses-with-selected-fields.tsv"),
+                                  col_types = cols(
+                                    .default = col_character(),
+                                    row_number = col_double(),
+                                    crash_date = col_date(format = ""),
+                                    crash_report_id = col_double(),
+                                    crash_time = col_time(format = ""),
+                                    count_pedestrian = col_double(),
+                                    count_bicycle = col_double(),
+                                    scooter = col_logical(),
+                                    wheel_chair = col_logical(),
+                                    number_of_vehicles = col_double(),
+                                    report_date = col_date(format = ""),
+                                    person_count = col_double(),
+                                    injury_count = col_double(),
+                                    number_of_lanes = col_double(),
+                                    lat_raw = col_double(),
+                                    lon_raw = col_double(),
+                                    has_st_number = col_logical(),
+                                    is_intersection_null = col_logical(),
+                                    street_intersects_self = col_logical(),
+                                    final_lat = col_double(),
+                                    final_lon = col_double()
+                                  ))
 
 # plot coordinates with leaflet -------------------------------------------
 
@@ -21,8 +44,8 @@ accidents_sf <- accidents_with_coords %>%
   mutate(injury_recoded = case_when(most_serious_injury == "Fatal" ~ "Fatal",
                                     most_serious_injury == "Incapacitating" ~ "Incapacitating",
                                     T ~ "Other")) %>% 
-  filter(!is.na(lon), !is.na(lat)) %>% 
-  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
+  filter(!is.na(final_lon), !is.na(final_lat)) %>% 
+  st_as_sf(coords = c("final_lon", "final_lat"), crs = 4326) %>% 
   st_jitter(factor = 0.000005) 
 
 # define color palette

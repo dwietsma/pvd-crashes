@@ -23,7 +23,7 @@ library(googleway)
 
 # read in data ------------------------------------------------------------
 
-raw <- read_csv(here("raw/pvd-accidents-raw.csv"),
+raw <- read_csv(here("raw/pvd-crashes-raw.csv"),
                 col_types = cols(
                   .default = col_character(),
                   CrashDate = col_date(format = "%d-%b-%y"),

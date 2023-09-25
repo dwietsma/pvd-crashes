@@ -58,4 +58,5 @@ final_selected <- final_full %>%
 final_selected %>% 
   write_tsv("proc/processed-addresses-with-selected-fields.tsv")
 
+# df <- readr::read_tsv("proc/processed-addresses-with-selected-fields.tsv")
 

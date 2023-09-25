@@ -39,7 +39,7 @@ sf_with_line_geo <- st_sfc(mapply(function(a,b){st_cast(st_union(a,b),"LINESTRIN
 sf_final %>% 
   filter(distance_btwn_coords_meters > 100) %>% 
   select(row_number, crash_report_id, best_coords) %>% 
-  write_csv(here::here("specify-which-coords-are-best.csv"))
+  write_csv(here::here("proc/specify-which-coords-are-best.csv"))
   
 # write out data ----------------------------------------------------------
 
