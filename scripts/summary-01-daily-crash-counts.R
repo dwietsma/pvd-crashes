@@ -31,6 +31,13 @@ final <- df_summarised %>%
   left_join(time_df, ., by = c("date" = "crash_date")) %>% 
   replace_na(., list(crash_count = 0))
 
+# final %>%  
+#   mutate(day_with_crash = if_else(crash_count >= 1, T, F)) %>%  
+#   group_by(year) %>% 
+#   summarise(num_of_days = n(), 
+#             day_with_crash = sum(day_with_crash)) %>% 
+#   summarise(mean(day_with_crash))
+
 # write out data ----------------------------------------------------------
 
 final %>% 
