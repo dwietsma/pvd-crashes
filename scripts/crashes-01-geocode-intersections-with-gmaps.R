@@ -1,6 +1,6 @@
 
 # Description:
-# This script uses 3  different google apis to retrieve coordinates for the raw intersections and addresses given by
+# This script uses 3different google apis to retrieve coordinates for the raw intersections and addresses given by
 # the city of Providence. The first geocoding pass worked well on some addresses but not well on others. We then use google's
 # autocomplete api to guess more locations. We retrieve coordinates from guesses via google's place details api. 
 # My understanding is that gmaps returns coordinates in the WGS84 EPSG 4326 CRS
@@ -9,8 +9,7 @@
 # https://developers.google.com/maps/documentation/geocoding/best-practices
 # https://developers.google.com/maps/documentation/geocoding/overview
 # https://rpubs.com/michaeldgarber/geocode
-
-# BE SURE TO DELETE SAMPLE LINE ONCE WE RECEIVE THE CORRECT DATA FROM CITY - LINE 30 
+# https://docs.google.com/spreadsheets/d/1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw/edit?usp=sharing (QA googlesheet)
 
 # load packages -----------------------------------------------------------
 
@@ -23,10 +22,15 @@ library(googleway)
 
 # read in data ------------------------------------------------------------
 
-raw <- read_csv(here("raw/pvd-crashes-raw.csv"),
+# specify filepath of the raw crash data you want to geocode
+
+# raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2010-01-01-to-2023-03-31.csv")
+raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2023-04-01-to-2023-12-31.csv")
+
+raw <- read_csv(raw_filepath,
                 col_types = cols(
                   .default = col_character(),
-                  CrashDate = col_date(format = "%d-%b-%y"),
+                  CrashDate = col_date(format = "%Y-%m-%d"),
                   ReportDate = col_date(format = "%d-%b-%y"),
                   CrashReportId = col_double(),
                   CrashTime = col_time(),
@@ -99,18 +103,29 @@ autocomplete_results <- uncertain_coords %>%
 # extract addresses from autocomplete results
 autocomplete_addresses <- map(autocomplete_results, ~pluck(.x, "predictions", "description")) 
 
+# If autcomplete returned NULL, set to NA
+
+# Function to replace NULL with NA
+replace_null_with_na <- function(x) {
+  if (is.null(x)) {
+    return(NA)
+  } else {
+    return(x)
+  }
+}
+
+autocomplete_addresses_no_nulls <- map(autocomplete_addresses, replace_null_with_na)
+
 # If autocomplete returned multiple addresses, set to NA, 
 # If autocomplete didn't return a result with ' & ', set to NA
-# If autcomplete returned NULL, set to NA
-cleaned_autocomplete_addresses <- map_chr(autocomplete_addresses, ~if_else(length(.x) > 1, NA_character_,
-                                                                           .x[[1]])) %>% 
-  if_else(str_detect(., " & ", negate = T), NA_character_, .) %>% 
-  na_if("NULL") 
+cleaned_autocomplete_addresses <-   map_chr(autocomplete_addresses_no_nulls, 
+                                            ~if_else(length(.x) > 1, NA_character_, .x[[1]])) %>% 
+  if_else(str_detect(., " & ", negate = T), NA_character_, .) 
 
 # extract place ids from autocomplete results
 autocomplete_place_ids <- map(autocomplete_results, ~pluck(.x, "predictions", "place_id")) 
-
-cleaned_autocomplete_place_ids <- map_chr(autocomplete_place_ids, ~if_else(length(.x) > 1, NA_character_, .x[[1]]))
+autocomplete_place_ids_no_nulls <- map(autocomplete_place_ids, replace_null_with_na)
+cleaned_autocomplete_place_ids <- map_chr(autocomplete_place_ids_no_nulls, ~if_else(length(.x) > 1, NA_character_, .x[[1]]))
 
 # get the coordinates of the locations found by autocomplete --------------
 
@@ -165,8 +180,10 @@ final <- clean_combined %>%
 
 # write out data ----------------------------------------------------------
 
+date_suffix <- str_extract(raw_filepath, "(?<=pvd-crashes-raw-).*(?=.csv)")
+
 final %>% 
-  write_tsv("proc/addresses-with-gmaps-coordinates.tsv")
+  write_tsv(paste0("proc/addresses-with-gmaps-coordinates-", date_suffix, ".tsv"))
 
 # plot --------------------------------------------------------------------
 

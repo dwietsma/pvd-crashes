@@ -65,6 +65,7 @@ final %>%
     here::here("proc/processed-addresses-with-selected-fields-and-pvd-nhoods-and-wards.tsv"))
 
 final_spatial %>% 
-  st_write(here::here("proc/crash-counts-by-pvd-wards/crash-counts-by-pvd-wards.shp"))
+  st_write(here::here("proc/crash-counts-by-pvd-wards/crash-counts-by-pvd-wards.shp"),
+           append=TRUE)
 
 

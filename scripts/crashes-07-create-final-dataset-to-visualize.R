@@ -21,7 +21,7 @@ df_selected <- df_raw %>%
          year = year(crash_date),
          month = month(crash_date, label= T, abbr = F)) %>% 
   filter(!is.na(pvd_nhood),
-         year %in% 2010:2022)
+         year >= 2010)
 
 # write out data ----------------------------------------------------------
 
