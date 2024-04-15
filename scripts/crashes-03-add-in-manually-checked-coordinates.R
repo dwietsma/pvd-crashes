@@ -13,7 +13,7 @@ library(googledrive)
 drive_auth(email = "dwietsma@gmail.com")
 gs4_auth(token = drive_token())
 
-
+# read in our police coordinate data
 filepaths <- list.files(here::here("proc"),
                         pattern = "^addresses-with-gmaps-coordinates.*.tsv",
                         full.names = T)
@@ -23,6 +23,7 @@ full_df <- map_dfr(.x = filepaths,
                sep = "\t",
                stringsAsFactors = F)
 
+# read in our googlesheet used for manually quality assurance
 google_sheet <- read_sheet("1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw")
 
 # cleanup google sheet data -----------------------------------------------
@@ -36,12 +37,15 @@ google_sheet_cleaned <- google_sheet %>%
 
 manually_qaed_records <- google_sheet_cleaned$crash_report_id
 
-# add and cleanup some fields in full_df ----------------------------------
+
+# join googlesheet with police data ---------------------------------------
 
 # add manually created 'best_coordinate_set' field from out QA googlesheet to the full dataframe 
 joined <-  left_join(full_df, google_sheet_cleaned, by = "crash_report_id")
 
-# add a field that says whether our final_lat fields are Raw, Amended, or Unknown
+# add fields and clean-up -------------------------------------------------
+
+# add more cleaned up fields
 final_full <- joined %>% 
   mutate(manually_qaed_record = if_else(crash_report_id %in% manually_qaed_records, T, F),
          street_intersects_self = case_when(street_or_highway == nearest_intersection ~ T,
@@ -57,8 +61,18 @@ final_full <- joined %>%
          final_lon = case_when(best_coordinate_set_expanded == "Neither" ~ corrected_lon,
                                best_coordinate_set_expanded == "Amended" ~ lon_api_best,
                                best_coordinate_set_expanded == "Raw" ~ lon_raw,
-                               best_coordinate_set_expanded == "Unknown" ~ NA_real_))
-  
+                               best_coordinate_set_expanded == "Unknown" ~ NA_real_),
+         hit_and_run = case_when(hit_and_run == "Yes, Driver Left Scene" ~ "Yes",
+                                 hit_and_run == "Yes, M/V and Driver Left Scene" ~ "Yes",
+                                 hit_and_run == "No" ~ "No",
+                                 hit_and_run == "Unknown" ~ "Unknown",
+                                 is.na(hit_and_run) ~ "Unknown"),
+         most_serious_injury = case_when(most_serious_injury == "Complains Of Pain" ~ "Pain Reported",
+                                         T ~ most_serious_injury),
+         year = year(crash_date),
+         month = month(crash_date, label= T, abbr = F)) %>% 
+  filter(year >= 2010)
+
 # write out data ----------------------------------------------------------
 
 # write out all of the messy fields
@@ -74,6 +88,4 @@ final_selected <- final_full %>%
 
 final_selected %>% 
   write_tsv("proc/processed-addresses-with-selected-fields.tsv")
-
-# df <- readr::read_tsv("proc/processed-addresses-with-selected-fields.tsv")
 

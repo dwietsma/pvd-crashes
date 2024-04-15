@@ -1,30 +1,85 @@
 
 library(tidyverse)
 library(lubridate)
+library(sf)
 # here
 
 # read in data ------------------------------------------------------------
 
-df_raw <- read_tsv(here::here("proc/processed-addresses-with-selected-fields-and-pvd-nhoods-wards-and-blocks.tsv"))
+df_raw <- read_tsv(here::here("proc/processed-addresses-with-selected-fields-and-pvd-nhoods-wards-and-blocks.tsv"),
+                   col_types = cols(
+                     row_number = col_double(),
+                     crash_date = col_date(format = ""),
+                     crash_report_id = col_double(),
+                     crash_time = col_time(format = ""),
+                     collision_type = col_character(),
+                     count_pedestrian = col_double(),
+                     count_bicycle = col_double(),
+                     scooter = col_logical(),
+                     wheel_chair = col_logical(),
+                     number_of_vehicles = col_double(),
+                     street_or_highway = col_character(),
+                     nearest_intersection = col_character(),
+                     report_date = col_character(),
+                     type_of_roadway = col_character(),
+                     road_surface_condition = col_character(),
+                     light_condition = col_character(),
+                     weather_condition = col_character(),
+                     manner_of_impact = col_character(),
+                     hit_and_run = col_character(),
+                     traffic_control = col_character(),
+                     person_count = col_double(),
+                     injury_count = col_double(),
+                     most_serious_injury = col_character(),
+                     number_of_lanes = col_double(),
+                     lat_raw = col_double(),
+                     lon_raw = col_double(),
+                     has_st_number = col_logical(),
+                     is_intersection_null = col_logical(),
+                     address_sent_to_geocoder = col_character(),
+                     api_coord_conf = col_character(),
+                     best_coordinate_set = col_character(),
+                     manually_qaed_record = col_logical(),
+                     street_intersects_self = col_logical(),
+                     best_coordinate_set_expanded = col_character(),
+                     final_lat = col_double(),
+                     final_lon = col_double(),
+                     year = col_double(),
+                     month = col_character(),
+                     pvd_nhood = col_character(),
+                     pvd_wards = col_double(),
+                     geoid20 = col_double()
+                   ))
 
 df_selected <- df_raw %>%
-  select(crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
+  select(year, crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
          hit_and_run, most_serious_injury, pvd_nhood, pvd_wards, geoid20,
          final_lat, final_lon) %>% 
-  mutate(hit_and_run = case_when(hit_and_run == "Yes, Driver Left Scene" ~ "Yes",
-                                 hit_and_run == "Yes, M/V and Driver Left Scene" ~ "Yes",
-                                 hit_and_run == "No" ~ "No",
-                                 hit_and_run == "Unknown" ~ "Unknown",
-                                 is.na(hit_and_run) ~ "Unknown"),
-         most_serious_injury = case_when(most_serious_injury %in% c("Complains Of Pain", "Non-Incapacitating") ~ "Non-Incapacitating",
-                                         TRUE ~ most_serious_injury),
-         year = year(crash_date),
-         month = month(crash_date, label= T, abbr = F)) %>% 
-  filter(!is.na(pvd_nhood),
-         year >= 2010)
+  filter(!is.na(pvd_nhood))
 
+# jitter final coordinates so they don't overlap --------------------------
+
+df_final <- st_as_sf(df_selected, coords = c("final_lon", "final_lat"), crs = 4326) %>% 
+  st_jitter(., factor = .002) %>% 
+  mutate(final_lon = sf::st_coordinates(.)[,1],
+         final_lat = sf::st_coordinates(.)[,2]) %>% 
+  st_drop_geometry()
+  
 # write out data ----------------------------------------------------------
 
-df_selected %>% 
+df_final %>% 
   write_tsv(here::here("proc/final-pvd-crashes.tsv"))
+
+# plot --------------------------------------------------------------------
+
+# library(leaflet) 
+# 
+# df %>%
+#   leaflet() %>%
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   setView(lng = -71.402550, lat = 41.826771, zoom = 14) %>%
+#   addCircles(stroke = T,
+#              color = "black",
+#              weight = 10)
+
 

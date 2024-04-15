@@ -54,10 +54,9 @@ final <- bind_rows(df_filtered, df_nas)
 
 final_spatial <- final %>% 
   mutate(year = year(crash_date)) %>% 
-  filter(year %in% c(2010:2022),
-         !is.na(pvd_nhood)) %>% 
+  filter(!is.na(pvd_nhood)) %>% 
   group_by(pvd_nhood, year) %>% 
-  summarise(crash_count = n()) %>% 
+  summarise(crash_count = n(), .groups = "drop") %>% 
   left_join(pvd_nhoods, ., by = c("lname" = "pvd_nhood"))
 
 # write out data ----------------------------------------------------------
@@ -68,5 +67,5 @@ final %>%
 
 final_spatial %>% 
   st_write(here::here("proc/crash-counts-by-pvd-nhoods/crash-counts-by-pvd-nhoods.shp"),
-           append=TRUE)
+           append = FALSE)
 

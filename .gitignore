@@ -8,3 +8,4 @@ raw/pvd-accidents-raw-no-cycling.csv
 raw/pvd-accidents-raw-incorrect.csv
 tableau/archive/
 .Rprofile
+tableau/.~*

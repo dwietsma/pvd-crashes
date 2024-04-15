@@ -54,8 +54,7 @@ final <- bind_rows(df_filtered, df_nas)
 
 final_spatial <- final %>% 
   mutate(year = year(crash_date)) %>% 
-  filter(year %in% c(2010:2022),
-         !is.na(geoid20)) %>% 
+  filter(!is.na(geoid20)) %>% 
   group_by(geoid20, year) %>% 
   summarise(crash_count = n(), .groups = "drop") %>% 
   left_join(ri_blocks, ., by = "geoid20") %>% 
@@ -73,4 +72,5 @@ final %>%
     here::here("proc/processed-addresses-with-selected-fields-and-pvd-nhoods-wards-and-blocks.tsv"))
 
 final_spatial %>% 
-  st_write(here::here("proc/crash-counts-by-pvd-census-blocks/crash-counts-by-pvd-census-blocks.shp"))
+  st_write(here::here("proc/crash-counts-by-pvd-census-blocks/crash-counts-by-pvd-census-blocks.shp"),
+           append = FALSE)
