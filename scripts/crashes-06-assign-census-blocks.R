@@ -7,6 +7,9 @@ library(lubridate)
 
 # read in data ------------------------------------------------------------
 
+# set the proj environmental variable, location would change depending on setup
+Sys.setenv(PROJ_LIB = "/opt/homebrew/Cellar/proj/9.4.0/share/proj")
+  
 ri_blocks <- st_read(
   here::here("raw/ri-census-blocks/tl_2022_44_tabblock20.shp"),
   stringsAsFactors = F) %>% 
@@ -74,3 +77,5 @@ final %>%
 final_spatial %>% 
   st_write(here::here("proc/crash-counts-by-pvd-census-blocks/crash-counts-by-pvd-census-blocks.shp"),
            append = FALSE)
+
+

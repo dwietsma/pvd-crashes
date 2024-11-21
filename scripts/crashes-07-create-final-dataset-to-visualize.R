@@ -53,7 +53,8 @@ df_raw <- read_tsv(here::here("proc/processed-addresses-with-selected-fields-and
 
 df_selected <- df_raw %>%
   select(year, crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
-         hit_and_run, most_serious_injury, pvd_nhood, pvd_wards, geoid20,
+         hit_and_run, most_serious_injury, traffic_control, road_surface_condition,
+         pvd_nhood, pvd_wards, geoid20,
          final_lat, final_lon) %>% 
   filter(!is.na(pvd_nhood))
 
@@ -62,8 +63,23 @@ df_selected <- df_raw %>%
 df_final <- st_as_sf(df_selected, coords = c("final_lon", "final_lat"), crs = 4326) %>% 
   st_jitter(., factor = .002) %>% 
   mutate(final_lon = sf::st_coordinates(.)[,1],
-         final_lat = sf::st_coordinates(.)[,2]) %>% 
-  st_drop_geometry()
+         final_lat = sf::st_coordinates(.)[,2],
+         traffic_controls = case_when(traffic_control == "No Controls" ~ "No Traffic Controls",
+                                      traffic_control %in% c("Other", "Unknown") ~ "Other",
+                                      traffic_control %in% c("Flashing Traffic Control Signal", 
+                                                             "Pavement Markings",
+                                                             "School Zone Signs",
+                                                             "Stop Signs",
+                                                             "Warning Signs",
+                                                             "Yield Signs") ~ "Signs & Markings",
+                                      
+                                      TRUE ~ traffic_control),
+         road_conditions = case_when(road_surface_condition %in% c("Slush", "Sand", "Ice/Frost",
+                                                                   "Other", "Snow", "Unknown",
+                                                                   "Mud, Dirt, Gravel") ~ "Other",
+                                     T ~ road_surface_condition)) %>% 
+  st_drop_geometry() %>% 
+  select(-c(traffic_control, road_surface_condition))
   
 # write out data ----------------------------------------------------------
 
