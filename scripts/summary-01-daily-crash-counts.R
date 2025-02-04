@@ -1,4 +1,9 @@
 
+# Description -------------------------------------------------------------
+
+# This script reads in the output of script 7. It summarizes the data
+# by calculating daily counts - the daily crash counts output supports a
+# particular tablau visualization. 
 
 # load packages -----------------------------------------------------------
 

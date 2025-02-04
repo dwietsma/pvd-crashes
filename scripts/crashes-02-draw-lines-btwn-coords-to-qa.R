@@ -1,9 +1,19 @@
 
+# Description -------------------------------------------------------------
+
+# This script reads in the output of the first script. It calculates the distance between the two sets of coordinates. 
+# If the coordinates seem far away from each other (>100 units), the script writes those records out to a google sheet. 
+# These records are then visualized and manually inspected. The analyst tries to determine which sets of coordinates to use
+# for th final charting - their entries in the google sheet specify which coordinates are best. 
+
 # https://docs.google.com/spreadsheets/d/1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw/edit?usp=sharing (QA googlesheet)
 
 # load packages -----------------------------------------------------------
 
 library(tidyverse)
+# specify where proj.db is located
+Sys.setenv(PROJ_LIB="/opt/homebrew/Cellar/proj/9.4.0/share/proj")
+Sys.getenv("PROJ_LIB")
 library(sf)
 # install.packages('sf', repos = c('https://r-spatial.r-universe.dev'))
 library(googlesheets4)
@@ -12,7 +22,7 @@ library(googledrive)
 # read in data ------------------------------------------------------------
 
 # this should be the latest batch of data that you want to QA
-df <- read.csv("proc/addresses-with-gmaps-coordinates-2023-04-01-to-2023-12-31.tsv", sep = "\t")
+df <- read.csv("proc/addresses-with-gmaps-coordinates-2024-01-01-to-2024-12-31.tsv", sep = "\t")
 
 # process data ------------------------------------------------------------
 
@@ -51,8 +61,9 @@ sf_final <- sf_with_line_geo %>%
 # write records to qa to google sheet -------------------------------------
 
 # connect to google drive & sheets
+# NOTE: you may need to manually authenticate and check box via browser
 drive_auth(email = "dwietsma@gmail.com")
-gs4_auth(token = drive_token())
+gs4_auth()
 
 # read in the existing records that have already been qa'ed
 sheet_ss <- "1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw"
@@ -69,10 +80,10 @@ append_these_rows_to_google <- sf_final %>%
 # append rows
 sheet_append(sheet_ss, append_these_rows_to_google, sheet = 1)
 
-
 # write out data to be visualized to help qa ------------------------------
 
-# this dataset will be visualized to in tableau to pick with coordinates look right
+# this data set will be visualized in tableau to help determine which coordinates look best
+# warning message is typical here
 sf_final %>% 
   st_write(here::here("proc/qa-the-latest-batch-of-data/lines-between-coordinates.shp"),
            append = FALSE)

@@ -1,15 +1,22 @@
 
-# Description:
-# This script uses 3different google apis to retrieve coordinates for the raw intersections and addresses given by
-# the city of Providence. The first geocoding pass worked well on some addresses but not well on others. We then use google's
-# autocomplete api to guess more locations. We retrieve coordinates from guesses via google's place details api. 
-# My understanding is that gmaps returns coordinates in the WGS84 EPSG 4326 CRS
+# Description -------------------------------------------------------------
+
+# This script take the raw crash data that is provided by the Providence Police Department. It does some light cleanup of the
+# data, and geocodes the address and intersection information. This gives us two sets of coordinates, one recorded by the Police
+# and provided in the original data, the second from Google maps using the address/intersection information from the raw data.
+# Having to two sets of coordinates will help us QA the data in a later step.
+
+# This script uses 3 different google apis to retrieve coordinates for the raw intersections and addresses. The first geocoding
+# works well on some addresses but not others. The second uses google's
+# autocomplete api to guess more locations. The third retrieves coordinates from guesses via google's place details api. 
 
 # Helpful links:
 # https://developers.google.com/maps/documentation/geocoding/best-practices
 # https://developers.google.com/maps/documentation/geocoding/overview
 # https://rpubs.com/michaeldgarber/geocode
 # https://docs.google.com/spreadsheets/d/1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw/edit?usp=sharing (QA googlesheet)
+# Google maps appears to return coordinates in the WGS84 EPSG 4326 CRS
+
 
 # load packages -----------------------------------------------------------
 
@@ -25,13 +32,13 @@ library(googleway)
 # specify filepath of the raw crash data you want to geocode
 
 # raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2010-01-01-to-2023-03-31.csv")
-raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2023-04-01-to-2023-12-31.csv")
+raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2024-01-01-to-2024-12-31.csv")
 
 raw <- read_csv(raw_filepath,
                 col_types = cols(
                   .default = col_character(),
                   CrashDate = col_date(format = "%Y-%m-%d"),
-                  ReportDate = col_date(format = "%d-%b-%y"),
+                  ReportDate = col_date(format = "%Y-%m-%d"),
                   CrashReportId = col_double(),
                   CrashTime = col_time(),
                   NumberofVehicles = col_double(),
@@ -187,10 +194,15 @@ final %>%
 
 # plot --------------------------------------------------------------------
 
-# final %>% 
-#   slice(78) %>% 
-#   st_as_sf(coords = c("lon_best", "lat_best"), crs = 4326) %>% 
-#   leaflet() %>% 
+# library(leaflet)
+# library(sf)
+# Sys.setenv(PROJ_LIB="/opt/homebrew/Cellar/proj/9.4.0/share/proj")
+# sf::sf_extSoftVersion()
+# 
+# final %>%
+#   slice(78) %>%
+#   st_as_sf(coords = c("lon_api_best", "lat_api_best"), crs = 4326) %>%
+#   leaflet() %>%
 #   addProviderTiles(providers$CartoDB.Positron) %>%
 #   setView(lng = -71.402550, lat = 41.826771, zoom = 14) %>%
 #   addCircles(stroke = T,

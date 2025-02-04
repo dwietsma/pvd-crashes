@@ -1,5 +1,16 @@
+
+# Description -------------------------------------------------------------
+
+# This script reads in the output of script 3 and a shapefile of Providence neighborhoods. 
+# It intersects the final coordinate set with the neighborhood geometeries to assign
+# a neighborhood to each record.
+
+# load packages -----------------------------------------------------------
+
 library(tidyverse)
 library(here)
+# set the proj environmental variable, location would change depending on setup
+Sys.setenv(PROJ_LIB = "/opt/homebrew/Cellar/proj/9.4.0/share/proj")
 library(sf)
 library(janitor)
 
@@ -28,7 +39,7 @@ df_transformed <- st_as_sf(x = df_filtered,
                        crs = 4326) %>% # need to first assign crs, https://crd150.github.io/georeferencing.html
   st_transform(crs = 2163) # then transform to planar to avoid later warnings
 
-# apply function to each row to intersect neighboorhoods and coordinates
+# apply function to each row to intersect neighborhoods and coordinates
 # https://gis.stackexchange.com/questions/282750/identify-polygon-containing-point-with-r-sf-package
 
 vector_of_lnames <- apply(st_intersects(pvd_nhoods, df_transformed, sparse = F), 2, 

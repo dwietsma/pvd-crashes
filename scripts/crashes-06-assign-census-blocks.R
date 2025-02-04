@@ -1,6 +1,15 @@
 
+# Description -------------------------------------------------------------
+
+# This script reads in the output of script 5 and a shapefile of Providence census block 
+# It intersects the final coordinate set with the ward geometeries to assign
+# a census block to each record.
+
+# load packages -----------------------------------------------------------
 library(tidyverse)
 library(here)
+# set the proj environmental variable, location would change depending on setup
+Sys.setenv(PROJ_LIB = "/opt/homebrew/Cellar/proj/9.4.0/share/proj")
 library(sf)
 library(janitor)
 library(lubridate)

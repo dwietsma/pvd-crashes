@@ -1,5 +1,9 @@
 
-# https://docs.google.com/spreadsheets/d/1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw/edit?usp=sharing (QA googlesheet)
+# Description -------------------------------------------------------------
+
+# This script reads in the output from script 1 and the QA google sheet completed after script 2.
+# It joins the information from the google sheet with the main dataframe and corrects records as specified in the google sheet.
+# https://docs.google.com/spreadsheets/d/1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw/edit?usp=sharing (QA google sheet)
 
 # load packages -----------------------------------------------------------
 
@@ -36,7 +40,6 @@ google_sheet_cleaned <- google_sheet %>%
          corrected_lon = as.numeric(str_extract(correct_coordinates, "-\\d+\\.\\d+")))
 
 manually_qaed_records <- google_sheet_cleaned$crash_report_id
-
 
 # join googlesheet with police data ---------------------------------------
 

@@ -1,4 +1,12 @@
 
+# Description -------------------------------------------------------------
+
+# This script reads in the output of script 6. It does some final cleanup -
+# selecting certain columns, refactoring variables, and jittering the coordinates
+# to reduce points from overlapping on the map
+
+# load packages -----------------------------------------------------------
+
 library(tidyverse)
 library(lubridate)
 library(sf)
