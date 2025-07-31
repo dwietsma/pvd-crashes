@@ -32,7 +32,9 @@ library(googleway)
 # specify filepath of the raw crash data you want to geocode
 
 # raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2010-01-01-to-2023-03-31.csv")
-raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2024-01-01-to-2024-12-31.csv")
+# raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2024-01-01-to-2024-12-31.csv")
+raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2025-01-01-to-2025-06-30.csv")
+
 
 raw <- read_csv(raw_filepath,
                 col_types = cols(
@@ -75,13 +77,15 @@ accidents <- raw %>%
          address = str_replace(address, " & ", " and "),
          address = if_else(is.na(address), "", address),
          is_address_blank = if_else(address == "", T, F),
-         row_number = row_number(),
-         scooter = case_when(scooter == "X" ~ T, T ~ F),
-         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)) %>% 
+         row_number = row_number()
+         #,scooter = case_when(scooter == "X" ~ T, T ~ F),
+         #wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)
+         ) %>% 
   rename(lat_raw = latitude,
          lon_raw = longitude,
          manner_of_impact = mannerof_impact,
-         number_of_vehicles = numberof_vehicles)
+         number_of_vehicles = numberof_vehicles) %>% 
+  filter(!is.na(collision_type)) # sometimes we get only ped, bike, and scooter crashes, other times it includes vehicle only
 
 # first round of geocoding ------------------------------------------------
 
@@ -101,8 +105,20 @@ google_autocomplete <- function(address_xyz) {
                                        location = c(41.823989, -71.412834))
 }
 
-autocomplete_results <- uncertain_coords %>%
-  pull(address...28) %>% 
+#dynamically find the original 'address' column. google api returns it with a new name. 
+address_col_passed_to_api <- uncertain_coords %>% 
+  select(starts_with("address...")) %>% 
+  names() %>% 
+  pluck(1)
+
+# save this for later
+address_col_returned_from_api <- uncertain_coords %>% 
+  select(starts_with("address...")) %>% 
+  names() %>% 
+  pluck(2)
+
+autocomplete_results <- uncertain_coords %>% 
+  pull(address_col_passed_to_api) %>% 
   map(., google_autocomplete) 
 
 # extract info from autocomplete results ----------------------------------
@@ -171,8 +187,8 @@ combined <- uncertain_coords_with_auto_cols %>%
 clean_combined <- combined %>% 
   rename(lon_api_first_try = lon,
          lat_api_first_try = lat,
-         address_sent_to_geocoder = "address...28",
-         address_returned_by_geocoder = "address...35",
+         address_sent_to_geocoder = {address_col_passed_to_api},
+         address_returned_by_geocoder = {address_col_returned_from_api},
          address_returned_by_autocomplete = address_autocompleted) %>%
   select(-c(south, north, east, west, index)) %>% 
   mutate(lat_api_best = case_when(!is.na(place_ids_autocompleted) ~ lat_api_second_try,
@@ -200,7 +216,6 @@ final %>%
 # sf::sf_extSoftVersion()
 # 
 # final %>%
-#   slice(78) %>%
 #   st_as_sf(coords = c("lon_api_best", "lat_api_best"), crs = 4326) %>%
 #   leaflet() %>%
 #   addProviderTiles(providers$CartoDB.Positron) %>%

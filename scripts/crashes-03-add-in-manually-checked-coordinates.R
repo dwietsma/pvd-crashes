@@ -14,6 +14,24 @@ library(googledrive)
 # read in data ------------------------------------------------------------
 
 # connect to google drive & sheets
+
+# make sure you're in the right project folder
+# here::here()
+
+# designate project-specific cache
+options(gargle_oauth_cache = here::here(".google_tokens"))
+
+# check the value of the option, if you like
+# gargle::gargle_oauth_cache()
+
+# trigger auth on purpose --> store a token in the specified cache
+# drive_auth()
+
+# see your token file in the cache, if you like
+# list.files(".google_tokens/")
+
+# step 2 (do this all following runs)
+# authorize
 drive_auth(email = "dwietsma@gmail.com")
 gs4_auth(token = drive_token())
 

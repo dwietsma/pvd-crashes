@@ -61,9 +61,27 @@ sf_final <- sf_with_line_geo %>%
 # write records to qa to google sheet -------------------------------------
 
 # connect to google drive & sheets
-# NOTE: you may need to manually authenticate and check box via browser
+# connect to google drive & sheets
+
+# make sure you're in the right project folder
+# here::here()
+
+# designate project-specific cache
+options(gargle_oauth_cache = here::here(".google_tokens"))
+
+# check the value of the option, if you like
+# gargle::gargle_oauth_cache()
+
+# trigger auth on purpose --> store a token in the specified cache
+# drive_auth()
+
+# see your token file in the cache, if you like
+# list.files(".google_tokens/")
+
+# step 2 (do this all following runs)
+# authorize
 drive_auth(email = "dwietsma@gmail.com")
-gs4_auth()
+gs4_auth(token = drive_token())
 
 # read in the existing records that have already been qa'ed
 sheet_ss <- "1miGkil-zBHW3wahtWszv4dndI3F47fSX-oPnh5cE0Qw"

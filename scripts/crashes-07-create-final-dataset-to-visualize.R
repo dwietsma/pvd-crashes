@@ -60,7 +60,7 @@ df_raw <- read_tsv(here::here("proc/processed-addresses-with-selected-fields-and
                    ))
 
 df_selected <- df_raw %>%
-  select(year, crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
+  select(year, month, crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
          hit_and_run, most_serious_injury, traffic_control, road_surface_condition,
          pvd_nhood, pvd_wards, geoid20,
          final_lat, final_lon) %>% 
