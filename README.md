@@ -68,7 +68,7 @@ Sys.setenv(PROJ_LIB="/path/to/proj")
 
 Once you receive the latest batch of data from the Providence police department, place the file in raw/pvd-raw-crash-data/. The file should be named something like: pvd-crashes-raw-2024-01-01-to-2024-12-31.csv. It may be necessary to do some light manual cleanup of the new file. For example, make sure the headers are the same as last year. If they are not, you can manually change the header in the raw file (maybe not a best practice but is expedient). Make sure the date format for the CrashDate and ReportDate fields are in YYYY-MM-DD format. If they are not, change the date format in excel with something like:
 
-highlight the relevant row. Select the data type dropdown \> select yyyy-mm-dd \> ok. Save.
+highlight the relevant row. Select the data type dropdown \> more number formats \> date \> select yyyy-mm-dd \> ok. Save.
 
 ### Step 3: Run scripts 1 & 2
 
@@ -88,8 +88,29 @@ Enter the crash_report_id into the tableau Crash R search to visualize the relev
 
 ### Step 6: Refresh and Re-post Tableau Charts
 
--   Open pvd-crash.twb
+- Open pvd-crash.twb
 
--   Select Data in the nav bar and select "Refresh all extracts"
+- Select Data in the nav bar and select "Refresh all extracts"
 
-efresh' all extracts update year in title if needed
+- Make sure the latest data appears in the visuals
+
+- Select the most recent year in the filters
+
+- Update viz titles as needed
+
+- Save
+
+- Sign into tableau public.
+
+- Annoyingly you need to publish each dashboard individually to tableau public. Use the names in the .twb tabs.
+
+## The QA Process
+
+The project receives raw coordinates from the Police Department that were presumably taken at or near the scene of the crash. The data also provide a street and the nearest intersection (also sometimes an address). The first script geocodes those addresses and intersections. The second script finds the distance between the raw and geocoded sets of coordinates.
+
+- If the distance is less than 100 meters, we use the raw coordinates - and feel good about the data quality of these records since we were able to roughly validate their location. This represents the majority of records.
+- Then there are four cases that we manually inspect. These include:
+  - Case 1: If the distance is greater than 100 meters, and there are two sets of coordinates (raw and geocoded), we manually inspect these records and try to determine which sets of coordinates (if any) to use.
+  - Case 2: If the raw coordinate falls outside of the city boundaries
+  - Case 3: If there are no raw coordinates, but we were able to geocode the intersections or addresses
+  - Case 4: If there are raw coordinates but not geocoded coordinates

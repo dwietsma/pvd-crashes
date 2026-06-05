@@ -8,9 +8,7 @@
 # load packages -----------------------------------------------------------
 
 library(tidyverse)
-library(lubridate)
 library(sf)
-# here
 
 # read in data ------------------------------------------------------------
 
@@ -45,49 +43,54 @@ df_raw <- read_tsv(here::here("proc/processed-addresses-with-selected-fields-and
                      has_st_number = col_logical(),
                      is_intersection_null = col_logical(),
                      address_sent_to_geocoder = col_character(),
-                     api_coord_conf = col_character(),
                      best_coordinate_set = col_character(),
                      manually_qaed_record = col_logical(),
-                     street_intersects_self = col_logical(),
-                     best_coordinate_set_expanded = col_character(),
                      final_lat = col_double(),
                      final_lon = col_double(),
                      year = col_double(),
                      month = col_character(),
                      pvd_nhood = col_character(),
                      pvd_wards = col_double(),
-                     geoid20 = col_double()
+                     geoid20 = col_character()
                    ))
+
+sf_city_boundary <- st_read(here::here("raw/pvd-city-boundaries/City_Boundary.shp")) %>%
+  st_transform(2163) %>%
+  st_buffer(500) %>%
+  st_transform(4326)
 
 df_selected <- df_raw %>%
   select(year, month, crash_report_id, crash_date, crash_time, collision_type, address_sent_to_geocoder,
          hit_and_run, most_serious_injury, traffic_control, road_surface_condition,
          pvd_nhood, pvd_wards, geoid20,
-         final_lat, final_lon) %>% 
-  filter(!is.na(pvd_nhood))
-
-# jitter final coordinates so they don't overlap --------------------------
-
-df_final <- st_as_sf(df_selected, coords = c("final_lon", "final_lat"), crs = 4326) %>% 
-  st_jitter(., factor = .002) %>% 
-  mutate(final_lon = sf::st_coordinates(.)[,1],
-         final_lat = sf::st_coordinates(.)[,2],
-         traffic_controls = case_when(traffic_control == "No Controls" ~ "No Traffic Controls",
+         final_lat, final_lon) %>%
+  mutate(traffic_controls = case_when(traffic_control == "No Controls" ~ "No Traffic Controls",
                                       traffic_control %in% c("Other", "Unknown") ~ "Other",
-                                      traffic_control %in% c("Flashing Traffic Control Signal", 
+                                      traffic_control %in% c("Flashing Traffic Control Signal",
                                                              "Pavement Markings",
                                                              "School Zone Signs",
                                                              "Stop Signs",
                                                              "Warning Signs",
                                                              "Yield Signs") ~ "Signs & Markings",
-                                      
                                       TRUE ~ traffic_control),
          road_conditions = case_when(road_surface_condition %in% c("Slush", "Sand", "Ice/Frost",
                                                                    "Other", "Snow", "Unknown",
                                                                    "Mud, Dirt, Gravel") ~ "Other",
-                                     T ~ road_surface_condition)) %>% 
-  st_drop_geometry() %>% 
+                                     T ~ road_surface_condition)) %>%
   select(-c(traffic_control, road_surface_condition))
+
+df_selected_nas <- filter(df_selected, is.na(final_lat) | is.na(final_lon))
+df_selected_complete <- filter(df_selected, !is.na(final_lat) & !is.na(final_lon))
+
+# jitter final coordinates so they don't overlap --------------------------
+
+df_final <- st_as_sf(df_selected_complete, coords = c("final_lon", "final_lat"), crs = 4326) %>%
+  filter(lengths(st_within(geometry, sf_city_boundary)) > 0) %>%
+  st_jitter(., factor = .002) %>%
+  mutate(final_lon = sf::st_coordinates(.)[,1],
+         final_lat = sf::st_coordinates(.)[,2]) %>%
+  st_drop_geometry() %>%
+  bind_rows(df_selected_nas)
   
 # write out data ----------------------------------------------------------
 

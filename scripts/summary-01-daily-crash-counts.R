@@ -3,12 +3,11 @@
 
 # This script reads in the output of script 7. It summarizes the data
 # by calculating daily counts - the daily crash counts output supports a
-# particular tablau visualization. 
+# particular tableau visualization. 
 
 # load packages -----------------------------------------------------------
 
 library(tidyverse)
-library(lubridate)
 library(here)
 
 # read in data ------------------------------------------------------------
@@ -24,7 +23,7 @@ df_raw <- read_tsv(here("proc/final-pvd-crashes.tsv"),
                      most_serious_injury = col_character(),
                      pvd_nhood = col_character(),
                      pvd_wards = col_double(),
-                     geoid20 = col_double(),
+                     geoid20 = col_character(),
                      year = col_double(),
                      month = col_character(),
                      final_lon = col_double(),
@@ -38,7 +37,7 @@ df_summarised <- df_raw %>%
   summarise(crash_count = n_distinct(crash_report_id))
 
 # find the last day in the last month that a crash occurs
-end_date <- rollforward(as_date(range(df_raw$crash_date)[2], roll_to_first = F))
+end_date <- rollforward(range(df_raw$crash_date)[2], roll_to_first = FALSE)
 
 # find the date of january 1 10 years before the end date
 # (we only want to visualize 10 years for the lite bright tableau chart)

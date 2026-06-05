@@ -17,8 +17,7 @@ library(janitor)
 # read in data ------------------------------------------------------------
 
 pvd_nhoods <- st_read(
-  here("raw/pvd-neighborhood-boundaries/geo_export_3baabfdf-9339-428d-a62e-9180506f7ca3.shp"),
-  stringsAsFactors = F) %>% 
+  here("raw/pvd-neighborhood-boundaries/geo_export_3baabfdf-9339-428d-a62e-9180506f7ca3.shp")) %>%
   clean_names() %>%
   st_transform(crs = 2163) # this converts to the planar crs, which will work best for the coordinate intersection later on
 
@@ -63,9 +62,8 @@ final <- bind_rows(df_filtered, df_nas)
 
 # add crash counts to pvd_nhoods ------------------------------------------
 
-final_spatial <- final %>% 
-  mutate(year = year(crash_date)) %>% 
-  filter(!is.na(pvd_nhood)) %>% 
+final_spatial <- final %>%
+  filter(!is.na(pvd_nhood)) %>%
   group_by(pvd_nhood, year) %>% 
   summarise(crash_count = n(), .groups = "drop") %>% 
   left_join(pvd_nhoods, ., by = c("lname" = "pvd_nhood"))

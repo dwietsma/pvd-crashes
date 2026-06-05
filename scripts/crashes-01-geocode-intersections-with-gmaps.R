@@ -2,9 +2,10 @@
 # Description -------------------------------------------------------------
 
 # This script take the raw crash data that is provided by the Providence Police Department. It does some light cleanup of the
-# data, and geocodes the address and intersection information. This gives us two sets of coordinates, one recorded by the Police
-# and provided in the original data, the second from Google maps using the address/intersection information from the raw data.
-# Having to two sets of coordinates will help us QA the data in a later step.
+# data, and geocodes the address and intersection information. This gives us two sets of coordinates:
+# 1) the first set is recorded by the Police and provided in the original data, 
+# 2) the second set is from Google maps APIs using the address/intersection information from the raw data
+# Having to two sets of coordinates will help us QA the data in a later script.
 
 # This script uses 3 different google apis to retrieve coordinates for the raw intersections and addresses. The first geocoding
 # works well on some addresses but not others. The second uses google's
@@ -27,25 +28,26 @@ library(glue)
 library(ggmap)
 library(googleway)
 
+source(here("scripts/crashes-00-project-parameters.R"))
+
 # read in data ------------------------------------------------------------
 
 # specify filepath of the raw crash data you want to geocode
 
-# raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2010-01-01-to-2023-03-31.csv")
-# raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2024-01-01-to-2024-12-31.csv")
-raw_filepath <- here("raw/pvd-raw-crash-data/pvd-crashes-raw-2025-01-01-to-2025-06-30.csv")
-
+raw_filepath <- here(glue::glue("raw/pvd-raw-crash-data/pvd-crashes-raw-{raw_date_range}.csv"))
 
 raw <- read_csv(raw_filepath,
                 col_types = cols(
                   .default = col_character(),
-                  CrashDate = col_date(format = "%Y-%m-%d"),
-                  ReportDate = col_date(format = "%Y-%m-%d"),
+                  CrashDate = col_character(),
+                  ReportDate = col_character(),
                   CrashReportId = col_double(),
                   CrashTime = col_time(),
                   NumberofVehicles = col_double(),
                   PersonCount = col_double(),
                   InjuryCount = col_double(),
+                  CountPedestrian = col_double(),
+                  CountBicycle = col_double(),
                   Latitude = col_character(),
                   Longitude = col_character()
                 )) 
@@ -67,7 +69,9 @@ googleway::set_key(key = google_key)
 accidents <- raw %>% 
   janitor::clean_names() %>% 
   select(-c(report_number, officer, badge)) %>% 
-  mutate(has_st_number = str_detect(street_or_highway, "^\\d*\\s"), #does the location column start with a digits and a space?
+  mutate(crash_date = lubridate::parse_date_time(crash_date, orders = c("Ymd", "mdy", "dby")) %>% as.Date(),
+         report_date = lubridate::parse_date_time(report_date, orders = c("Ymd", "mdy", "dby")) %>% as.Date(),
+         has_st_number = str_detect(street_or_highway, "^\\d+\\s"), #does the location column start with a digits and a space?
          is_intersection_null = if_else(is.na(nearest_intersection), T, F),
          address = case_when(has_st_number == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
                              is_intersection_null == T ~ glue("{str_to_title(street_or_highway)}, Providence, RI, USA"),
@@ -78,25 +82,32 @@ accidents <- raw %>%
          address = if_else(is.na(address), "", address),
          is_address_blank = if_else(address == "", T, F),
          row_number = row_number()
-         #,scooter = case_when(scooter == "X" ~ T, T ~ F),
-         #wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)
-         ) %>% 
+         ,scooter = case_when(scooter == "X" ~ T, T ~ F),
+         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)
+         ) %>%
   rename(lat_raw = latitude,
          lon_raw = longitude,
          manner_of_impact = mannerof_impact,
-         number_of_vehicles = numberof_vehicles) %>% 
-  filter(!is.na(collision_type)) # sometimes we get only ped, bike, and scooter crashes, other times it includes vehicle only
+         number_of_vehicles = numberof_vehicles,
+         address_sent_to_geocoder = address) %>%
+  filter(
+    collision_type %in% c("Pedestrian", "Bicycle") |
+    scooter |
+    wheel_chair |
+    (!is.na(count_pedestrian) & count_pedestrian > 0) |
+    (!is.na(count_bicycle) & count_bicycle > 0)
+  )
 
 # first round of geocoding ------------------------------------------------
 
-accidents_with_coordinates <- accidents %>% 
-  mutate_geocode(address, output = "more")
-
-addresses_with_warnings <- warnings()
+message(glue("Round 1: geocoding {nrow(accidents)} records via Google Geocoding API..."))
+accidents_with_coordinates <- accidents %>%
+  mutate_geocode(address_sent_to_geocoder, output = "more")
+message(glue("Round 1 complete. {sum(accidents_with_coordinates$type %in% c('intersection', 'premise', 'street_address', 'subpremise'), na.rm = TRUE)} of {nrow(accidents_with_coordinates)} records geocoded with high confidence."))
 
 # use autocomplete to improve accuracy of certain rows --------------------
 
-uncertain_coords <- accidents_with_coordinates %>% 
+uncertain_coords <- accidents_with_coordinates %>%
   filter(!(type %in% c("intersection", "premise", "street_address", "subpremise")))
 
 # define autocomplete api function
@@ -105,21 +116,10 @@ google_autocomplete <- function(address_xyz) {
                                        location = c(41.823989, -71.412834))
 }
 
-#dynamically find the original 'address' column. google api returns it with a new name. 
-address_col_passed_to_api <- uncertain_coords %>% 
-  select(starts_with("address...")) %>% 
-  names() %>% 
-  pluck(1)
-
-# save this for later
-address_col_returned_from_api <- uncertain_coords %>% 
-  select(starts_with("address...")) %>% 
-  names() %>% 
-  pluck(2)
-
-autocomplete_results <- uncertain_coords %>% 
-  pull(address_col_passed_to_api) %>% 
-  map(., google_autocomplete) 
+message(glue("Round 2: sending {nrow(uncertain_coords)} low-confidence records to Google Places Autocomplete API..."))
+autocomplete_results <- uncertain_coords %>%
+  pull(address_sent_to_geocoder) %>%
+  map(., google_autocomplete)
 
 # extract info from autocomplete results ----------------------------------
 
@@ -141,9 +141,10 @@ autocomplete_addresses_no_nulls <- map(autocomplete_addresses, replace_null_with
 
 # If autocomplete returned multiple addresses, set to NA, 
 # If autocomplete didn't return a result with ' & ', set to NA
-cleaned_autocomplete_addresses <-   map_chr(autocomplete_addresses_no_nulls, 
-                                            ~if_else(length(.x) > 1, NA_character_, .x[[1]])) %>% 
-  if_else(str_detect(., " & ", negate = T), NA_character_, .) 
+cleaned_autocomplete_addresses <-   map_chr(autocomplete_addresses_no_nulls,
+                                            ~if_else(length(.x) > 1, NA_character_, .x[[1]])) %>%
+  if_else(str_detect(., " & ", negate = T), NA_character_, .)
+message(glue("Round 2 complete. {sum(!is.na(cleaned_autocomplete_addresses))} of {nrow(uncertain_coords)} records returned a usable autocomplete result."))
 
 # extract place ids from autocomplete results
 autocomplete_place_ids <- map(autocomplete_results, ~pluck(.x, "predictions", "place_id")) 
@@ -167,9 +168,12 @@ googleway::google_place_details(place_id) %>%
 }
 
 # retrieve coordinates via google's place details api
-second_round_coords <- uncertain_coords_with_auto_cols %>% 
-  pull(place_ids_autocompleted) %>% 
+n_place_ids <- sum(!is.na(uncertain_coords_with_auto_cols$place_ids_autocompleted))
+message(glue("Round 3: retrieving coordinates for {n_place_ids} records via Google Place Details API..."))
+second_round_coords <- uncertain_coords_with_auto_cols %>%
+  pull(place_ids_autocompleted) %>%
   map_dfr(., geocode_with_place_ids, .id = "index")
+message(glue("Round 3 complete. {nrow(second_round_coords)} coordinates retrieved."))
 
 # add the new coordinates back into full dataframe
 combined <- uncertain_coords_with_auto_cols %>% 
@@ -187,14 +191,13 @@ combined <- uncertain_coords_with_auto_cols %>%
 clean_combined <- combined %>% 
   rename(lon_api_first_try = lon,
          lat_api_first_try = lat,
-         address_sent_to_geocoder = {address_col_passed_to_api},
-         address_returned_by_geocoder = {address_col_returned_from_api},
+         address_returned_by_geocoder = address,
          address_returned_by_autocomplete = address_autocompleted) %>%
   select(-c(south, north, east, west, index)) %>% 
-  mutate(lat_api_best = case_when(!is.na(place_ids_autocompleted) ~ lat_api_second_try,
+  mutate(lat_api_best = case_when(!is.na(lat_api_second_try) ~ lat_api_second_try,
                                   T ~ lat_api_first_try),
-         lon_api_best = case_when(!is.na(place_ids_autocompleted) ~ lon_api_second_try,
-                              T ~ lon_api_first_try)) 
+         lon_api_best = case_when(!is.na(lon_api_second_try) ~ lon_api_second_try,
+                              T ~ lon_api_first_try))
 
 final <- clean_combined %>% 
   rowwise() %>% #compute distance between raw coords and best api coords
@@ -203,9 +206,9 @@ final <- clean_combined %>%
 
 # write out data ----------------------------------------------------------
 
-date_suffix <- str_extract(raw_filepath, "(?<=pvd-crashes-raw-).*(?=.csv)")
+date_suffix <- str_extract(raw_filepath, "(?<=pvd-crashes-raw-).*(?=\\.csv)")
 
-final %>% 
+final %>%
   write_tsv(paste0("proc/addresses-with-gmaps-coordinates-", date_suffix, ".tsv"))
 
 # plot --------------------------------------------------------------------

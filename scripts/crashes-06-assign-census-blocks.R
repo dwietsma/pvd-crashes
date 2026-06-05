@@ -12,16 +12,11 @@ library(here)
 Sys.setenv(PROJ_LIB = "/opt/homebrew/Cellar/proj/9.4.0/share/proj")
 library(sf)
 library(janitor)
-library(lubridate)
 
 # read in data ------------------------------------------------------------
 
-# set the proj environmental variable, location would change depending on setup
-Sys.setenv(PROJ_LIB = "/opt/homebrew/Cellar/proj/9.4.0/share/proj")
-  
 ri_blocks <- st_read(
-  here::here("raw/ri-census-blocks/tl_2022_44_tabblock20.shp"),
-  stringsAsFactors = F) %>% 
+  here::here("raw/ri-census-blocks/tl_2022_44_tabblock20.shp")) %>%
   clean_names() %>%
   st_transform(crs = 2163) # this converts to the planar crs, which will work best for the coordinate intersection later on
 
@@ -64,9 +59,8 @@ df_filtered$geoid20 <- block_keep_first
 # add null latitudes back in
 final <- bind_rows(df_filtered, df_nas)
 
-final_spatial <- final %>% 
-  mutate(year = year(crash_date)) %>% 
-  filter(!is.na(geoid20)) %>% 
+final_spatial <- final %>%
+  filter(!is.na(geoid20)) %>%
   group_by(geoid20, year) %>% 
   summarise(crash_count = n(), .groups = "drop") %>% 
   left_join(ri_blocks, ., by = "geoid20") %>% 

@@ -17,8 +17,7 @@ library(janitor)
 # read in data ------------------------------------------------------------
 
 pvd_wards <- st_read(
-  here("raw/pvd-ward-boundaries/BND_PVD_Wards_2022.shp"),
-  stringsAsFactors = F) %>% 
+  here("raw/pvd-ward-boundaries/BND_PVD_Wards_2022.shp")) %>%
   clean_names() %>%
   st_transform(crs = 2163) # this converts to the planar crs, which will work best for the coordinate intersection later on
 
@@ -61,9 +60,8 @@ df_filtered$pvd_wards <- district_keep_first
 # add null latitudes back in
 final <- bind_rows(df_filtered, df_nas)
 
-final_spatial <- final %>% 
-  mutate(year = year(crash_date)) %>% 
-  filter(!is.na(pvd_nhood)) %>% 
+final_spatial <- final %>%
+  filter(!is.na(pvd_wards)) %>%
   group_by(pvd_wards, year) %>% 
   summarise(crash_count = n(), .groups = "drop") %>% 
   left_join(pvd_wards, ., by = c("district" = "pvd_wards"))
