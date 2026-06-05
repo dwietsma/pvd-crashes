@@ -83,7 +83,12 @@ accidents <- raw %>%
          is_address_blank = if_else(address == "", T, F),
          row_number = row_number()
          ,scooter = case_when(scooter == "X" ~ T, T ~ F),
-         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F)
+         wheel_chair = case_when(wheel_chair == "X" ~ T, T ~ F),
+         collision_type = case_when(
+           collision_type == "Other" & !is.na(count_pedestrian) & count_pedestrian > 0 ~ "Pedestrian",
+           collision_type == "Other" & !is.na(count_bicycle) & count_bicycle > 0 ~ "Bicycle",
+           TRUE ~ collision_type
+         )
          ) %>%
   rename(lat_raw = latitude,
          lon_raw = longitude,
